@@ -1,0 +1,108 @@
+---
+- hosts: all
+  become: yes
+  vars_files:
+  - vars/{{ stage }}.yml
+  pre_tasks:
+  - name: "Install etckeeper"
+    apt: name=etckeeper
+  roles:
+  - role: znz.ufw
+    ufw_default_forward_policy: reject
+    ufw_allow_in_tcp:
+    - comment: "HTTP"
+      port: 80
+    - comment: "HTTPS"
+      port: 443
+    ufw_allow_out_tcp:
+    - comment: "HTTP"
+      port: 80
+    - comment: "SSH"
+      port: 22
+    #- comment: "SMTPS"
+    #  port: 465
+    ufw_before_rule: "{{ openvpn_nat_rules }}"
+    ufw_before6_rule: "{{ openvpn_nat_rules_6 }}"
+  - role: znz.journald
+  - role: znz.sshd
+  - role: znz.unattended-upgrades
+  - role: znz.nadoka
+    when: nadoka is not none and nadoka != []
+  - role: znz.openvpn-server
+  tasks:
+  - name: 'Update /etc/hosts'
+    lineinfile:
+      path: /etc/hosts
+      regexp: "{{ item.regexp }}"
+      line: "{{ item.line }}"
+    with_items: "{{ stage_etc_hosts }}"
+  - name: 'Comment out 127.0.1.1 in /etc/hosts'
+    replace:
+      path: /etc/hosts
+      regexp: '^(127\.0\.1\.1)'
+      replace: '#\1'
+  - name: 'Install logwatch'
+    apt: name=logwatch
+  - name: 'Install curl'
+    # openvpn hook to slack
+    apt: name=curl
+  - name: "Allow ipv4 forward"
+    sysctl:
+      name: net.ipv4.ip_forward
+      value: 1
+      sysctl_file: /etc/sysctl.d/50-local.conf
+      sysctl_set: yes
+      reload: yes
+  - name: "Allow forward tcp ports of ipv4"
+    ufw:
+      from_ip: "{{ allow_forward_from_ipv4 }}"
+      proto: tcp
+      route: yes
+      rule: allow
+      to_port: "{{ item }}"
+    with_items: "{{ allow_forward_tcp_ports }}"
+  - name: "Allow forward udp ports of ipv4"
+    ufw:
+      from_ip: "{{ allow_forward_from_ipv4 }}"
+      proto: udp
+      route: yes
+      rule: allow
+      to_port: "{{ item }}"
+    with_items: "{{ allow_forward_udp_ports }}"
+  - name: "Allow forward tcp/udp ports of ipv4"
+    ufw:
+      from_ip: "{{ allow_forward_from_ipv4 }}"
+      route: yes
+      rule: allow
+      to_port: "{{ item }}"
+    with_items: "{{ allow_forward_both_ports }}"
+  - name: "Allow ipv6 forward"
+    sysctl:
+      name: net.ipv6.conf.all.forwarding
+      value: 1
+      sysctl_file: /etc/sysctl.d/50-local.conf
+      sysctl_set: yes
+      reload: yes
+  - name: "Allow forward tcp ports of ipv6"
+    ufw:
+      from_ip: "{{ allow_forward_from_ipv6 }}"
+      proto: tcp
+      route: yes
+      rule: allow
+      to_port: "{{ item }}"
+    with_items: "{{ allow_forward_tcp_ports }}"
+  - name: "Allow forward udp ports of ipv6"
+    ufw:
+      from_ip: "{{ allow_forward_from_ipv6 }}"
+      proto: udp
+      route: yes
+      rule: allow
+      to_port: "{{ item }}"
+    with_items: "{{ allow_forward_udp_ports }}"
+  - name: "Allow forward tcp/udp ports of ipv6"
+    ufw:
+      from_ip: "{{ allow_forward_from_ipv6 }}"
+      route: yes
+      rule: allow
+      to_port: "{{ item }}"
+    with_items: "{{ allow_forward_both_ports }}"
